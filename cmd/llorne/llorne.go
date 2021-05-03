@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 
 	"github.com/boltdb/bolt"
@@ -46,9 +49,15 @@ type TokenUpdate struct {
 
 func main() {
 	var (
-		flDB = flag.String("db", "/var/db/micromdm.db", "path to micromdm DB")
+		flDB  = flag.String("db", "/var/db/micromdm.db", "path to micromdm DB")
+		flURL = flag.String("url", "", "NanoMDM migration URL")
+		flKey = flag.String("key", "", "NanoMDM API Key")
 	)
 	flag.Parse()
+	if *flURL == "" || *flKey == "" {
+		log.Fatal("need to supply URL and API key")
+	}
+	client := http.DefaultClient
 	if _, err := os.Stat(*flDB); err != nil {
 		log.Fatal(err)
 	}
@@ -102,7 +111,11 @@ func main() {
 			log.Println(err)
 			continue
 		}
-		fmt.Println(string(authPlist))
+		fmt.Printf("sending device Authenticate for: UDID=%s\n", authenticate.UDID)
+		if err := put(client, *flURL, *flKey, authPlist); err != nil {
+			log.Println(err)
+			continue
+		}
 		token, err := hex.DecodeString(pushInfo.Token)
 		if err != nil {
 			log.Println(err)
@@ -128,7 +141,11 @@ func main() {
 			log.Println(err)
 			continue
 		}
-		fmt.Println(string(tokenPlist))
+		fmt.Printf("sending device TokenUpdate for: UDID=%s\n", tokenUpdate.UDID)
+		if err := put(client, *flURL, *flKey, tokenPlist); err != nil {
+			log.Println(err)
+			continue
+		}
 	}
 
 	userDB, err := userbuiltin.NewDB(boltDB)
@@ -140,7 +157,6 @@ func main() {
 		log.Fatal(err)
 	}
 	for _, user := range users {
-		fmt.Println("user", user.UserID)
 		pushInfo, err := apnsDB.PushInfo(context.Background(), user.UserID)
 		if err != nil {
 			log.Println(err)
@@ -168,8 +184,34 @@ func main() {
 			log.Println(err)
 			continue
 		}
-		fmt.Println(string(tokenPlist))
+		fmt.Printf("sending user TokenUpdate for: UserID=%s UserShortName=%s\n", tokenUpdate.UserID, tokenUpdate.UserShortName)
+		if err := put(client, *flURL, *flKey, tokenPlist); err != nil {
+			log.Println(err)
+			continue
+		}
+
 	}
 
 	return
+}
+
+func put(client *http.Client, url string, key string, sendBytes []byte) error {
+	req, err := http.NewRequest("PUT", url, bytes.NewReader(sendBytes))
+	if err != nil {
+		return err
+	}
+	req.SetBasicAuth("nanomdm", key)
+	res, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	_, err = ioutil.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+	if res.StatusCode != 200 {
+		return fmt.Errorf("Check-in Request failed with HTTP status: %d", res.StatusCode)
+	}
+	return nil
 }
