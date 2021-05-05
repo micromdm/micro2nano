@@ -72,8 +72,13 @@ func M2NCommandHandler(url string, key string) http.HandlerFunc {
 		}
 		jsonResp := &struct {
 			Payload *mdm.CommandPayload `json:"payload,omitempty"`
-			Err     error               `json:"error,omitempty"`
-		}{Payload: cmdPayload, Err: err}
+			Err     string              `json:"error,omitempty"`
+		}{}
+		if err != nil {
+			jsonResp.Err = err.Error()
+		} else {
+			jsonResp.Payload = cmdPayload
+		}
 		if err != nil {
 			log.Println(err)
 		}
