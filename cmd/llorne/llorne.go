@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -55,7 +56,7 @@ func main() {
 	)
 	flag.Parse()
 	if *flURL == "" || *flKey == "" {
-		log.Fatal("need to supply URL and API key")
+		log.Println("URL or API key not set; not sending server requests")
 	}
 	client := http.DefaultClient
 	if _, err := os.Stat(*flDB); err != nil {
@@ -85,10 +86,6 @@ func main() {
 		pushInfo, err := apnsDB.PushInfo(context.Background(), device.UDID)
 		if err != nil {
 			log.Println(err)
-			continue
-		}
-		// TODO:
-		if pushInfo.PushMagic == "fakePushMagic" {
 			continue
 		}
 		authenticate := &Authenticate{
@@ -196,6 +193,9 @@ func main() {
 }
 
 func put(client *http.Client, url string, key string, sendBytes []byte) error {
+	if url == "" || key == "" {
+		return errors.New("no URL or API key set")
+	}
 	req, err := http.NewRequest("PUT", url, bytes.NewReader(sendBytes))
 	if err != nil {
 		return err
