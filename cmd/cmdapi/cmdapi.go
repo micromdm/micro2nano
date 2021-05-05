@@ -46,49 +46,42 @@ func M2NCommandHandler(url string, key string) http.HandlerFunc {
 		cmdReq := &mdm.CommandRequest{}
 		decoder := json.NewDecoder(r.Body)
 		err := decoder.Decode(&cmdReq)
+		var cmdPayload *mdm.CommandPayload
+		if err == nil {
+			cmdPayload, err = mdm.NewCommandPayload(cmdReq)
+		}
+		var plistBytes []byte
+		if err == nil {
+			log.Printf("new command: udid=%s request_type=%s uuid=%s\n", cmdReq.UDID, cmdPayload.Command.RequestType, cmdPayload.CommandUUID)
+			plistBytes, err = plist.Marshal(cmdPayload)
+		} else {
+			log.Printf("error parsing body: %v\n", err)
+		}
+		var req *http.Request
+		if err == nil {
+			req, err = http.NewRequestWithContext(r.Context(), "GET", url+"/"+cmdReq.UDID, bytes.NewBuffer(plistBytes))
+		}
+		var resp *http.Response
+		if err == nil {
+			req.SetBasicAuth("nanomdm", key)
+			resp, err = http.DefaultClient.Do(req)
+		}
+		if err == nil {
+			defer resp.Body.Close()
+			_, err = ioutil.ReadAll(resp.Body)
+		}
+		jsonResp := &struct {
+			Payload *mdm.CommandPayload `json:"payload,omitempty"`
+			Err     error               `json:"error,omitempty"`
+		}{Payload: cmdPayload, Err: err}
 		if err != nil {
 			log.Println(err)
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
 		}
-		cmdPayload, err := mdm.NewCommandPayload(cmdReq)
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		err = json.NewEncoder(w).Encode(jsonResp)
 		if err != nil {
 			log.Println(err)
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
 		}
-		log.Printf("new command: udid=%s request_type=%s uuid=%s\n", cmdReq.UDID, cmdPayload.Command.RequestType, cmdPayload.CommandUUID)
-		plistBytes, err := plist.Marshal(cmdPayload)
-		if err != nil {
-			log.Println(err)
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-		req, err := http.NewRequestWithContext(r.Context(), "GET", url+"/"+cmdReq.UDID, bytes.NewBuffer(plistBytes))
-		if err != nil {
-			log.Println(err)
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-		req.SetBasicAuth("nanomdm", key)
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			log.Println(err)
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-		defer resp.Body.Close()
-
-		responseData, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			log.Println(err)
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
-
-		w.Write(responseData)
 	}
 }
 
