@@ -55,8 +55,10 @@ func main() {
 		flKey = flag.String("key", "", "NanoMDM API Key")
 	)
 	flag.Parse()
+	var skipServer bool
 	if *flURL == "" || *flKey == "" {
 		log.Println("URL or API key not set; not sending server requests")
+		skipServer = true
 	}
 	client := http.DefaultClient
 	if _, err := os.Stat(*flDB); err != nil {
@@ -109,9 +111,11 @@ func main() {
 			continue
 		}
 		fmt.Printf("sending device Authenticate for: UDID=%s\n", authenticate.UDID)
-		if err := put(client, *flURL, *flKey, authPlist); err != nil {
-			log.Println(err)
-			continue
+		if !skipServer {
+			if err := put(client, *flURL, *flKey, authPlist); err != nil {
+				log.Println(err)
+				continue
+			}
 		}
 		token, err := hex.DecodeString(pushInfo.Token)
 		if err != nil {
@@ -139,9 +143,11 @@ func main() {
 			continue
 		}
 		fmt.Printf("sending device TokenUpdate for: UDID=%s\n", tokenUpdate.UDID)
-		if err := put(client, *flURL, *flKey, tokenPlist); err != nil {
-			log.Println(err)
-			continue
+		if !skipServer {
+			if err := put(client, *flURL, *flKey, tokenPlist); err != nil {
+				log.Println(err)
+				continue
+			}
 		}
 	}
 
@@ -182,13 +188,13 @@ func main() {
 			continue
 		}
 		fmt.Printf("sending user TokenUpdate for: UserID=%s UserShortName=%s\n", tokenUpdate.UserID, tokenUpdate.UserShortName)
-		if err := put(client, *flURL, *flKey, tokenPlist); err != nil {
-			log.Println(err)
-			continue
+		if !skipServer {
+			if err := put(client, *flURL, *flKey, tokenPlist); err != nil {
+				log.Println(err)
+				continue
+			}
 		}
-
 	}
-
 	return
 }
 
