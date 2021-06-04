@@ -21,6 +21,9 @@ import (
 	userbuiltin "github.com/micromdm/micromdm/platform/user/builtin"
 )
 
+// overridden by -ldflags -X
+var version = "unknown"
+
 type Authenticate struct {
 	MessageType  string
 	UDID         string
@@ -50,11 +53,18 @@ type TokenUpdate struct {
 
 func main() {
 	var (
-		flDB  = flag.String("db", "/var/db/micromdm.db", "path to micromdm DB")
-		flURL = flag.String("url", "", "NanoMDM migration URL")
-		flKey = flag.String("key", "", "NanoMDM API Key")
+		flDB      = flag.String("db", "/var/db/micromdm.db", "path to micromdm DB")
+		flURL     = flag.String("url", "", "NanoMDM migration URL")
+		flKey     = flag.String("key", "", "NanoMDM API Key")
+		flVersion = flag.Bool("version", false, "print version")
 	)
 	flag.Parse()
+
+	if *flVersion {
+		fmt.Println(version)
+		os.Exit(0)
+	}
+
 	var skipServer bool
 	if *flURL == "" || *flKey == "" {
 		log.Println("URL or API key not set; not sending server requests")

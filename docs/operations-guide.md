@@ -32,6 +32,12 @@ This is the *NanoMDM* API key for authenticating to the NanoMDM instance.
 
 The URL of the NanoMDM command API endpoint. For example "http://127.0.0.1:9000/v1/enqueue".
 
+#### -version
+
+* print version
+
+Print version and exit.
+
 ## llorne
 
 `llorne` (enroll spelled backwards) is a tool that works with NanoMDM's "migration" endpoint to import MicroMDM enrollment data into NanoMDM from a MicroMDM database.
@@ -51,3 +57,9 @@ This is the NanoMDM API key for authenticating to the NanoMDM server.
 #### -url string
 
 The URL of the NanoMDM migration endpoint. For example "http://127.0.0.1:9000/migration".
+
+#### -version
+
+* print version
+
+Print version and exit.

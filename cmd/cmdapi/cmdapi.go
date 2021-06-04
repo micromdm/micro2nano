@@ -5,13 +5,18 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/groob/plist"
 	"github.com/micromdm/micromdm/mdm/mdm"
 )
+
+// overridden by -ldflags -X
+var version = "unknown"
 
 func main() {
 	var (
@@ -19,8 +24,14 @@ func main() {
 		flMicroKey = flag.String("api-key", "", "MicroMDM API key")
 		flNanoKey  = flag.String("nano-api-key", "", "NanoMDM API key")
 		flNanoURL  = flag.String("nano-url", "", "NanoMDM Command URL")
+		flVersion  = flag.Bool("version", false, "print version")
 	)
 	flag.Parse()
+
+	if *flVersion {
+		fmt.Println(version)
+		os.Exit(0)
+	}
 
 	if *flMicroKey == "" || *flNanoKey == "" {
 		log.Fatal("must provide API keys")
