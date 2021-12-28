@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/boltdb/bolt"
 	"github.com/groob/plist"
@@ -57,12 +58,20 @@ func main() {
 		flURL     = flag.String("url", "", "NanoMDM migration URL")
 		flKey     = flag.String("key", "", "NanoMDM API Key")
 		flVersion = flag.Bool("version", false, "print version")
+		flUDIDs   = flag.String("udids", "", "UDIDs to migrate (comma separated)")
 	)
 	flag.Parse()
 
 	if *flVersion {
 		fmt.Println(version)
 		os.Exit(0)
+	}
+
+	udids := make(map[string]bool)
+	if *flUDIDs != "" {
+		for _, s := range strings.Split(*flUDIDs, ",") {
+			udids[s] = true
+		}
 	}
 
 	var skipServer bool
@@ -95,6 +104,9 @@ func main() {
 		log.Fatal(err)
 	}
 	for _, device := range devices {
+		if _, ok := udids[device.UDID]; len(udids) > 0 && !ok {
+			continue
+		}
 		pushInfo, err := apnsDB.PushInfo(context.Background(), device.UDID)
 		if err != nil {
 			log.Println(err)
@@ -170,6 +182,9 @@ func main() {
 		log.Fatal(err)
 	}
 	for _, user := range users {
+		if _, ok := udids[user.UDID]; len(udids) > 0 && !ok {
+			continue
+		}
 		pushInfo, err := apnsDB.PushInfo(context.Background(), user.UserID)
 		if err != nil {
 			log.Println(err)
@@ -197,7 +212,7 @@ func main() {
 			log.Println(err)
 			continue
 		}
-		fmt.Printf("sending user TokenUpdate for: UserID=%s UserShortName=%s\n", tokenUpdate.UserID, tokenUpdate.UserShortName)
+		fmt.Printf("sending user TokenUpdate for: UserID=%s UserShortName=%s UDID=%s\n", tokenUpdate.UserID, tokenUpdate.UserShortName, user.UDID)
 		if !skipServer {
 			if err := put(client, *flURL, *flKey, tokenPlist); err != nil {
 				log.Println(err)
