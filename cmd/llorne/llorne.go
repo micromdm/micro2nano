@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/boltdb/bolt"
 	"github.com/groob/plist"
@@ -52,6 +53,18 @@ type TokenUpdate struct {
 	UserLongName  string `plist:",omitempty"`
 }
 
+func shouldProcessDevice(udids map[string]bool, cutOff time.Time, d *device.Device) (bool, string) {
+	if len(udids) > 0 {
+		if _, ok := udids[d.UDID]; !ok {
+			return false, "not in UDID set"
+		}
+	}
+	if !cutOff.IsZero() && d.LastSeen.Before(cutOff) {
+		return false, fmt.Sprintf("LastSeen of %s before cut off", d.LastSeen.Format("2006-01-02"))
+	}
+	return true, ""
+}
+
 func main() {
 	var (
 		flDB      = flag.String("db", "/var/db/micromdm.db", "path to micromdm DB")
@@ -59,6 +72,7 @@ func main() {
 		flKey     = flag.String("key", "", "NanoMDM API Key")
 		flVersion = flag.Bool("version", false, "print version")
 		flUDIDs   = flag.String("udids", "", "UDIDs to migrate (comma separated)")
+		flLSDays  = flag.Int("days", 0, "Skip processing devices with a last seen older than this many days")
 	)
 	flag.Parse()
 
@@ -103,8 +117,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	var cutOff time.Time
+	if *flLSDays > 0 {
+		cutOff = time.Now().AddDate(0, 0, -*flLSDays)
+	}
 	for _, device := range devices {
-		if _, ok := udids[device.UDID]; len(udids) > 0 && !ok {
+		if ok, msg := shouldProcessDevice(udids, cutOff, &device); !ok {
+			log.Printf("skipping device %s: %s", device.UDID, msg)
 			continue
 		}
 		pushInfo, err := apnsDB.PushInfo(context.Background(), device.UDID)
@@ -182,7 +201,14 @@ func main() {
 		log.Fatal(err)
 	}
 	for _, user := range users {
-		if _, ok := udids[user.UDID]; len(udids) > 0 && !ok {
+		// we can't lookup users by UDID, so we have to settle for
+		// iterating all users and looking up the device by UDID
+		d, err := deviceDB.DeviceByUDID(context.Background(), user.UDID)
+		if err != nil {
+			log.Printf("error looking up device by UDID %s for user %s: %v", user.UDID, user.UserID, err)
+		}
+		if ok, msg := shouldProcessDevice(udids, cutOff, d); !ok {
+			log.Printf("skipping device %s (for user %s): %s", d.UDID, user.UDID, msg)
 			continue
 		}
 		pushInfo, err := apnsDB.PushInfo(context.Background(), user.UserID)
