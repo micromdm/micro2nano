@@ -60,6 +60,9 @@ func shouldProcessDevice(udids map[string]bool, cutOff time.Time, d *device.Devi
 			return false, "not in UDID set"
 		}
 	}
+	if !d.Enrolled {
+		return false, "enrolled status is false"
+	}
 	if !cutOff.IsZero() && d.LastSeen.Before(cutOff) {
 		return false, fmt.Sprintf("LastSeen of %s before cut off", d.LastSeen.Format("2006-01-02"))
 	}
