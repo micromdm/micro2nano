@@ -123,7 +123,7 @@ func main() {
 	}
 	for _, device := range devices {
 		if ok, msg := shouldProcessDevice(udids, cutOff, &device); !ok {
-			log.Printf("skipping device %s: %s", device.UDID, msg)
+			log.Printf("skipping device UDID=%s: %s", device.UDID, msg)
 			continue
 		}
 		pushInfo, err := apnsDB.PushInfo(context.Background(), device.UDID)
@@ -208,7 +208,7 @@ func main() {
 			log.Printf("error looking up device by UDID %s for user %s: %v", user.UDID, user.UserID, err)
 		}
 		if ok, msg := shouldProcessDevice(udids, cutOff, d); !ok {
-			log.Printf("skipping device %s (for user %s): %s", d.UDID, user.UDID, msg)
+			log.Printf("skipping device UDID=%s for UserID=%s UserShortName=%s: %s", d.UDID, user.UserID, user.UserShortname, msg)
 			continue
 		}
 		pushInfo, err := apnsDB.PushInfo(context.Background(), user.UserID)
