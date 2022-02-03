@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha1"
 	"encoding/hex"
 	"errors"
 	"flag"
@@ -65,6 +66,35 @@ func shouldProcessDevice(udids map[string]bool, cutOff time.Time, d *device.Devi
 	return true, ""
 }
 
+const messageBucket = "mdm.checkin.message.hashes"
+
+func messageHash(m []byte) []byte {
+	sum := sha1.Sum(m)
+	return sum[:]
+}
+
+func messageSent(db *bolt.DB, k, v []byte) error {
+	return db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(messageBucket))
+		b.Put(k, v)
+		return nil
+	})
+}
+
+func messageSeen(db *bolt.DB, k []byte) (seen bool) {
+	err := db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(messageBucket))
+		if len(b.Get(k)) > 0 {
+			seen = true
+		}
+		return nil
+	})
+	if err != nil {
+		log.Println(err)
+	}
+	return
+}
+
 func main() {
 	var (
 		flDB      = flag.String("db", "/var/db/micromdm.db", "path to micromdm DB")
@@ -73,6 +103,7 @@ func main() {
 		flVersion = flag.Bool("version", false, "print version")
 		flUDIDs   = flag.String("udids", "", "UDIDs to migrate (comma separated)")
 		flLSDays  = flag.Int("days", 0, "Skip processing devices with a last seen older than this many days")
+		flTrkPath = flag.String("track-path", "", "Path to tracking database to avoid sending duplicate messages")
 	)
 	flag.Parse()
 
@@ -121,6 +152,22 @@ func main() {
 	if *flLSDays > 0 {
 		cutOff = time.Now().AddDate(0, 0, -*flLSDays)
 	}
+
+	var trackDB *bolt.DB
+	if *flTrkPath != "" {
+		trackDB, err = bolt.Open(*flTrkPath, 0600, nil)
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = trackDB.Update(func(tx *bolt.Tx) error {
+			_, err := tx.CreateBucketIfNotExists([]byte(messageBucket))
+			return err
+		})
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	for _, device := range devices {
 		if ok, msg := shouldProcessDevice(udids, cutOff, &device); !ok {
 			log.Printf("skipping device UDID=%s: %s", device.UDID, msg)
@@ -151,12 +198,23 @@ func main() {
 			log.Println(err)
 			continue
 		}
-		fmt.Printf("sending device Authenticate for: UDID=%s\n", authenticate.UDID)
 		if !skipServer {
-			if err := put(client, *flURL, *flKey, authPlist); err != nil {
-				log.Println(err)
-				continue
+			hashed := messageHash(authPlist)
+			if *flTrkPath != "" && !messageSeen(trackDB, hashed) {
+				log.Printf("sending device Authenticate for: UDID=%s", authenticate.UDID)
+				if err := put(client, *flURL, *flKey, authPlist); err != nil {
+					log.Println(err)
+					continue
+				}
+				v := "device_authenticate " + device.UDID + " " + time.Now().String()
+				if err := messageSent(trackDB, hashed, []byte(v)); err != nil {
+					log.Println(fmt.Errorf("error saving track Authenticate: %w", err))
+				}
+			} else {
+				log.Printf("skipping (seen) device Authenticate for: UDID=%s", authenticate.UDID)
 			}
+		} else {
+			log.Printf("processing device Authenticate for: UDID=%s", authenticate.UDID)
 		}
 		token, err := hex.DecodeString(pushInfo.Token)
 		if err != nil {
@@ -183,12 +241,23 @@ func main() {
 			log.Println(err)
 			continue
 		}
-		fmt.Printf("sending device TokenUpdate for: UDID=%s\n", tokenUpdate.UDID)
 		if !skipServer {
-			if err := put(client, *flURL, *flKey, tokenPlist); err != nil {
-				log.Println(err)
-				continue
+			hashed := messageHash(tokenPlist)
+			if *flTrkPath != "" && !messageSeen(trackDB, hashed) {
+				log.Printf("sending device TokenUpdate for: UDID=%s", tokenUpdate.UDID)
+				if err := put(client, *flURL, *flKey, tokenPlist); err != nil {
+					log.Println(err)
+					continue
+				}
+				v := "device_token_update " + device.UDID + " " + time.Now().String()
+				if err := messageSent(trackDB, hashed, []byte(v)); err != nil {
+					log.Println(fmt.Errorf("error saving track TokenUpdate: %w", err))
+				}
+			} else {
+				log.Printf("skipping (seen) device TokenUpdate for: UDID=%s", tokenUpdate.UDID)
 			}
+		} else {
+			log.Printf("processing device TokenUpdate for: UDID=%s", tokenUpdate.UDID)
 		}
 	}
 
@@ -238,12 +307,23 @@ func main() {
 			log.Println(err)
 			continue
 		}
-		fmt.Printf("sending user TokenUpdate for: UserID=%s UserShortName=%s UDID=%s\n", tokenUpdate.UserID, tokenUpdate.UserShortName, user.UDID)
 		if !skipServer {
-			if err := put(client, *flURL, *flKey, tokenPlist); err != nil {
-				log.Println(err)
-				continue
+			hashed := messageHash(tokenPlist)
+			if *flTrkPath != "" && !messageSeen(trackDB, hashed) {
+				log.Printf("sending user TokenUpdate for: UserID=%s UserShortName=%s UDID=%s\n", tokenUpdate.UserID, tokenUpdate.UserShortName, user.UDID)
+				if err := put(client, *flURL, *flKey, tokenPlist); err != nil {
+					log.Println(err)
+					continue
+				}
+				v := "user_token_update " + user.UserID + "," + user.UDID + "," + user.UserShortname + " " + time.Now().String()
+				if err := messageSent(trackDB, hashed, []byte(v)); err != nil {
+					log.Println(fmt.Errorf("error saving track TokenUpdate: %w", err))
+				}
+			} else {
+				log.Printf("skipping (seen) user TokenUpdate for: UserID=%s UserShortName=%s UDID=%s\n", tokenUpdate.UserID, tokenUpdate.UserShortName, user.UDID)
 			}
+		} else {
+			log.Printf("processing user TokenUpdate for: UserID=%s UserShortName=%s UDID=%s\n", tokenUpdate.UserID, tokenUpdate.UserShortName, user.UDID)
 		}
 	}
 	return
