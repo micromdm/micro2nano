@@ -68,7 +68,7 @@ Path to a separate BoltDB database that keeps track of send Authenticate and Tok
 
 * UDIDs to migrate (comma separated)
 
-Common-separated list of UDIDs to migrate, ignoring all others. Will migrate all UDIDs if none are specified.
+Comma-separated list of UDIDs to migrate, ignoring all others. Will migrate all UDIDs if none are specified.
 
 #### -url string
 
