@@ -44,6 +44,12 @@ Print version and exit.
 
 ### Switches
 
+#### -days int
+
+* Skip processing devices with a last seen older than this many days
+
+Skip processing of any device with a Last Seen date older than this many days. This feature originally intended to cull very old/dated enrollments from the database.
+
 #### -db string
 
 * path to micromdm DB (default "/var/db/micromdm.db")
@@ -53,6 +59,12 @@ Print version and exit.
 * NanoMDM API Key
 
 This is the NanoMDM API key for authenticating to the NanoMDM server.
+
+#### track-path string
+
+* Path to tracking database to avoid sending duplicate messages
+
+Path to a separate BoltDB database that keeps track of send Authenticate and TokenUpdate messages and prevents re-sending the same message twice. We track "seen" and "sent" messages by the hash of their contents as MicroMDM does not have the ability to track a device's enrollment date.
 
 #### -url string
 
