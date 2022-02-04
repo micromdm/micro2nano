@@ -55,6 +55,9 @@ type TokenUpdate struct {
 }
 
 func shouldProcessDevice(udids map[string]bool, cutOff time.Time, d *device.Device) (bool, string) {
+	if d == nil {
+		return false, "invalid (nil) device"
+	}
 	if len(udids) > 0 {
 		if _, ok := udids[d.UDID]; !ok {
 			return false, "not in UDID set"
@@ -278,6 +281,7 @@ func main() {
 		d, err := deviceDB.DeviceByUDID(context.Background(), user.UDID)
 		if err != nil {
 			log.Printf("error looking up device by UDID %s for user %s: %v", user.UDID, user.UserID, err)
+			continue
 		}
 		if ok, msg := shouldProcessDevice(udids, cutOff, d); !ok {
 			log.Printf("skipping device UDID=%s for UserID=%s UserShortName=%s: %s", d.UDID, user.UserID, user.UserShortname, msg)
