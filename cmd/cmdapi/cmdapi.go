@@ -45,7 +45,7 @@ func main() {
 
 	versionHandler := func() http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte(version))
+			w.Write([]byte(`{"version":"` + version + `"}`))
 		}
 	}
 	http.Handle("/version", versionHandler())
