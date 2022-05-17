@@ -43,6 +43,13 @@ func main() {
 
 	http.Handle("/v1/commands", handler)
 
+	versionHandler := func() http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(version))
+		}
+	}
+	http.Handle("/version", versionHandler())
+
 	log.Printf("starting server %s\n", *flListen)
 	http.ListenAndServe(*flListen, nil)
 }
