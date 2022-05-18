@@ -42,16 +42,19 @@ func main() {
 	handler = simpleLog(handler)
 
 	http.Handle("/v1/commands", handler)
-
-	versionHandler := func() http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte(version))
-		}
-	}
-	http.Handle("/version", versionHandler())
+	http.Handle("/version", versionHandler(version))
 
 	log.Printf("starting server %s\n", *flListen)
 	http.ListenAndServe(*flListen, nil)
+}
+
+// versionHandler returns a simple JSON response from a version string.
+func versionHandler(version string) http.HandlerFunc {
+	bodyBytes := []byte(`{"version":"` + version + `"}`)
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(bodyBytes)
+	}
 }
 
 func M2NCommandHandler(url string, key string) http.HandlerFunc {
