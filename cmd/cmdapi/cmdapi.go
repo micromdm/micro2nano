@@ -42,7 +42,6 @@ func main() {
 	handler = simpleLog(handler)
 
 	http.Handle("/v1/commands", handler)
-
 	http.Handle("/version", versionHandler(version))
 
 	log.Printf("starting server %s\n", *flListen)
