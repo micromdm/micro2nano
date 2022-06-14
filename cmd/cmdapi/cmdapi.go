@@ -2,17 +2,22 @@ package main
 
 import (
 	"bytes"
-	"crypto/subtle"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"log"
+	stdlog "log"
+	"math/rand"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/groob/plist"
 	"github.com/micromdm/micromdm/mdm/mdm"
+	mdmhttp "github.com/micromdm/nanomdm/http"
+	"github.com/micromdm/nanomdm/log"
+	"github.com/micromdm/nanomdm/log/ctxlog"
+	"github.com/micromdm/nanomdm/log/stdlogfmt"
 )
 
 // overridden by -ldflags -X
@@ -34,33 +39,35 @@ func main() {
 	}
 
 	if *flMicroKey == "" || *flNanoKey == "" {
-		log.Fatal("must provide API keys")
+		fmt.Println("must provide API keys")
+		os.Exit(1)
 	}
 
-	var handler http.Handler = M2NCommandHandler(*flNanoURL, *flNanoKey)
-	handler = basicAuth(handler, "micromdm", *flMicroKey, "micromdm")
-	handler = simpleLog(handler)
+	logger := stdlogfmt.New(stdlog.Default(), true)
 
-	http.Handle("/v1/commands", handler)
-	http.Handle("/version", versionHandler(version))
+	var handler http.Handler = M2NCommandHandler(*flNanoURL, *flNanoKey, logger.With("handler", "command-handler"))
+	handler = mdmhttp.BasicAuthMiddleware(handler, "micromdm", *flMicroKey, "micromdm")
 
-	log.Printf("starting server %s\n", *flListen)
-	http.ListenAndServe(*flListen, nil)
-}
+	mux := http.NewServeMux()
 
-// versionHandler returns a simple JSON response from a version string.
-func versionHandler(version string) http.HandlerFunc {
-	bodyBytes := []byte(`{"version":"` + version + `"}`)
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(bodyBytes)
+	mux.Handle("/v1/commands", handler)
+	mux.Handle("/version", mdmhttp.VersionHandler(version))
+
+	rand.Seed(time.Now().UnixNano())
+
+	logger.Info("msg", "starting server", "listen", *flListen)
+	err := http.ListenAndServe(*flListen, mdmhttp.TraceLoggingMiddleware(mux, logger, newTraceID))
+	if err != nil {
+		logger.Info("msg", "server stopped", "err", err)
+		os.Exit(1)
 	}
 }
 
-func M2NCommandHandler(url string, key string) http.HandlerFunc {
+func M2NCommandHandler(url string, key string, logger log.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		logger := ctxlog.Logger(r.Context(), logger)
 		if r.Method != http.MethodPost {
-			log.Println("POST method required")
+			logger.Info("err", "POST method required")
 			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 			return
 		}
@@ -73,10 +80,15 @@ func M2NCommandHandler(url string, key string) http.HandlerFunc {
 		}
 		var plistBytes []byte
 		if err == nil {
-			log.Printf("new command: udid=%s request_type=%s uuid=%s\n", cmdReq.UDID, cmdPayload.Command.RequestType, cmdPayload.CommandUUID)
+			logger.Info(
+				"msg", "new command",
+				"udid", cmdReq.UDID,
+				"request_type", cmdPayload.Command.RequestType,
+				"command_uuid", cmdPayload.CommandUUID,
+			)
 			plistBytes, err = plist.Marshal(cmdPayload)
 		} else {
-			log.Printf("error parsing body: %v\n", err)
+			logger.Info("msg", "parsing body", "err", err)
 		}
 		var req *http.Request
 		if err == nil {
@@ -101,33 +113,22 @@ func M2NCommandHandler(url string, key string) http.HandlerFunc {
 			jsonResp.Payload = cmdPayload
 		}
 		if err != nil {
-			log.Println(err)
+			logger.Info("err", err)
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		err = json.NewEncoder(w).Encode(jsonResp)
 		if err != nil {
-			log.Println(err)
+			logger.Info("msg", "encoding JSON", "err", err)
 		}
 	}
 }
 
-func basicAuth(next http.Handler, username, password, realm string) http.HandlerFunc {
-	uBytes := []byte(username)
-	pBytes := []byte(password)
-	return func(w http.ResponseWriter, r *http.Request) {
-		u, p, ok := r.BasicAuth()
-		if !ok || subtle.ConstantTimeCompare([]byte(u), uBytes) != 1 || subtle.ConstantTimeCompare([]byte(p), pBytes) != 1 {
-			w.Header().Set("WWW-Authenticate", `Basic realm="`+realm+`"`)
-			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-			return
-		}
-		next.ServeHTTP(w, r)
-	}
-}
-
-func simpleLog(next http.Handler) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		log.Println(r.RemoteAddr, r.Method, r.URL.Path, r.UserAgent())
-		next.ServeHTTP(w, r)
-	}
+// newTraceID generates a new HTTP trace ID for context logging.
+// Currently this just makes a random string. This would be better
+// served by e.g. https://github.com/oklog/ulid or something like
+// https://opentelemetry.io/ someday.
+func newTraceID() string {
+	b := make([]byte, 8)
+	rand.Read(b)
+	return fmt.Sprintf("%x", b)
 }
