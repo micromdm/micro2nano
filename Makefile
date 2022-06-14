@@ -35,7 +35,7 @@ micro2nano-%-$(VERSION).zip: cmdapi-% llorne-%
 	rm -rf $(subst .zip,,$@)
 
 clean:
-	rm -f cmdapi-* llorne-*
+	rm -f cmdapi-* llorne-* micro2nano-*
 
 release: \
 	micro2nano-darwin-amd64-$(VERSION).zip \
