@@ -20,20 +20,27 @@ $(CMDAPI): cmd/cmdapi
 $(LLORNE): cmd/llorne
 	GOOS=$(word 2,$(subst -, ,$@)) GOARCH=$(word 3,$(subst -, ,$(subst .exe,,$@))) go build $(LDFLAGS) -o $@ ./$<
 
-%-$(VERSION).zip: %.exe
-	rm -f $@
-	zip $@ $<
+micro2nano-%-$(VERSION).zip: cmdapi-%.exe llorne-%.exe
+	rm -rf $(subst .zip,,$@)
+	mkdir $(subst .zip,,$@)
+	ln $^ $(subst .zip,,$@)
+	zip -r $@ $(subst .zip,,$@)
+	rm -rf $(subst .zip,,$@)
 
-%-$(VERSION).zip: %
-	rm -f $@
-	zip $@ $<
+micro2nano-%-$(VERSION).zip: cmdapi-% llorne-%
+	rm -rf $(subst .zip,,$@)
+	mkdir $(subst .zip,,$@)
+	ln $^ $(subst .zip,,$@)
+	zip -r $@ $(subst .zip,,$@)
+	rm -rf $(subst .zip,,$@)
 
 clean:
 	rm -f cmdapi-* llorne-*
 
 release: \
-	$(foreach bin,$(CMDAPI),$(subst .exe,,$(bin))-$(VERSION).zip) \
-	$(foreach bin,$(LLORNE),$(subst .exe,,$(bin))-$(VERSION).zip)
+	micro2nano-darwin-amd64-$(VERSION).zip \
+	micro2nano-darwin-arm64-$(VERSION).zip \
+	micro2nano-linux-amd64-$(VERSION).zip
 
 test:
 	go test -v -cover -race ./...
