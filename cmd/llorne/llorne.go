@@ -80,6 +80,9 @@ func messageHash(m []byte) []byte {
 }
 
 func messageSent(db *bolt.DB, k, v []byte) error {
+	if db == nil {
+		return nil
+	}
 	return db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(messageBucket))
 		b.Put(k, v)
@@ -88,6 +91,9 @@ func messageSent(db *bolt.DB, k, v []byte) error {
 }
 
 func messageSeen(db *bolt.DB, k []byte) (seen bool) {
+	if db == nil {
+		return false
+	}
 	err := db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(messageBucket))
 		if len(b.Get(k)) > 0 {
@@ -206,15 +212,17 @@ func main() {
 		}
 		if !skipServer {
 			hashed := messageHash(authPlist)
-			if *flTrkPath != "" && !messageSeen(trackDB, hashed) {
+			if *flTrkPath == "" || !messageSeen(trackDB, hashed) {
 				log.Printf("sending device Authenticate for: UDID=%s", authenticate.UDID)
 				if err := put(client, *flURL, *flKey, authPlist); err != nil {
 					log.Println(err)
 					continue
 				}
 				v := "device_authenticate " + device.UDID + " " + time.Now().String()
-				if err := messageSent(trackDB, hashed, []byte(v)); err != nil {
-					log.Println(fmt.Errorf("error saving track Authenticate: %w", err))
+				if *flTrkPath != "" {
+					if err := messageSent(trackDB, hashed, []byte(v)); err != nil {
+						log.Println(fmt.Errorf("error saving track Authenticate: %w", err))
+					}
 				}
 			} else {
 				log.Printf("skipping (seen) device Authenticate for: UDID=%s", authenticate.UDID)
@@ -249,15 +257,17 @@ func main() {
 		}
 		if !skipServer {
 			hashed := messageHash(tokenPlist)
-			if *flTrkPath != "" && !messageSeen(trackDB, hashed) {
+			if *flTrkPath == "" || !messageSeen(trackDB, hashed) {
 				log.Printf("sending device TokenUpdate for: UDID=%s", tokenUpdate.UDID)
 				if err := put(client, *flURL, *flKey, tokenPlist); err != nil {
 					log.Println(err)
 					continue
 				}
 				v := "device_token_update " + device.UDID + " " + time.Now().String()
-				if err := messageSent(trackDB, hashed, []byte(v)); err != nil {
-					log.Println(fmt.Errorf("error saving track TokenUpdate: %w", err))
+				if *flTrkPath != "" {
+					if err := messageSent(trackDB, hashed, []byte(v)); err != nil {
+						log.Println(fmt.Errorf("error saving track TokenUpdate: %w", err))
+					}
 				}
 			} else {
 				log.Printf("skipping (seen) device TokenUpdate for: UDID=%s", tokenUpdate.UDID)
