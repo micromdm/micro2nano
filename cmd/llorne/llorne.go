@@ -16,12 +16,12 @@ import (
 	"time"
 
 	"github.com/boltdb/bolt"
-	"github.com/groob/plist"
 	apnsbuiltin "github.com/micromdm/micromdm/platform/apns/builtin"
 	"github.com/micromdm/micromdm/platform/device"
 	devicebuiltin "github.com/micromdm/micromdm/platform/device/builtin"
 	"github.com/micromdm/micromdm/platform/pubsub/inmem"
 	userbuiltin "github.com/micromdm/micromdm/platform/user/builtin"
+	"github.com/micromdm/plist"
 )
 
 // overridden by -ldflags -X
