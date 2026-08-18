@@ -12,12 +12,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/groob/plist"
 	"github.com/micromdm/micromdm/mdm/mdm"
-	mdmhttp "github.com/micromdm/nanomdm/http"
-	"github.com/micromdm/nanomdm/log"
-	"github.com/micromdm/nanomdm/log/ctxlog"
-	"github.com/micromdm/nanomdm/log/stdlogfmt"
+	libhttp "github.com/micromdm/nanolib/http"
+	"github.com/micromdm/nanolib/http/trace"
+	"github.com/micromdm/nanolib/log"
+	"github.com/micromdm/nanolib/log/ctxlog"
+	"github.com/micromdm/nanolib/log/stdlogfmt"
+	"github.com/micromdm/plist"
 )
 
 // overridden by -ldflags -X
@@ -43,20 +44,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger := stdlogfmt.New(stdlog.Default(), true)
+	logger := stdlogfmt.New(stdlogfmt.WithLogger(stdlog.Default()), stdlogfmt.WithDebug())
 
 	var handler http.Handler = M2NCommandHandler(*flNanoURL, *flNanoKey, logger.With("handler", "command-handler"))
-	handler = mdmhttp.BasicAuthMiddleware(handler, "micromdm", *flMicroKey, "micromdm")
+	handler = libhttp.NewSimpleBasicAuthHandler(handler, "micromdm", *flMicroKey, "micromdm")
 
 	mux := http.NewServeMux()
 
 	mux.Handle("/v1/commands", handler)
-	mux.Handle("/version", mdmhttp.VersionHandler(version))
+	mux.Handle("/version", libhttp.NewJSONVersionHandler(version))
 
 	rand.Seed(time.Now().UnixNano())
 
 	logger.Info("msg", "starting server", "listen", *flListen)
-	err := http.ListenAndServe(*flListen, mdmhttp.TraceLoggingMiddleware(mux, logger, newTraceID))
+	err := http.ListenAndServe(*flListen, trace.NewTraceLoggingHandler(mux, logger, newTraceID))
 	if err != nil {
 		logger.Info("msg", "server stopped", "err", err)
 		os.Exit(1)
@@ -127,7 +128,7 @@ func M2NCommandHandler(url string, key string, logger log.Logger) http.HandlerFu
 // Currently this just makes a random string. This would be better
 // served by e.g. https://github.com/oklog/ulid or something like
 // https://opentelemetry.io/ someday.
-func newTraceID() string {
+func newTraceID(*http.Request) string {
 	b := make([]byte, 8)
 	rand.Read(b)
 	return fmt.Sprintf("%x", b)
